@@ -1,8 +1,9 @@
-/* Slip service worker: prefer network so Home Screen gets updates. */
-const VERSION = "2026.10.12.12";
+/* Slip service worker: keep the running version until the user taps Update. */
+const VERSION = "2026.10.12.13";
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting();
+  // Do not skipWaiting here — stay in "waiting" until the Update button
+  // posts SKIP_WAITING so the open app never swaps mid-session.
   event.waitUntil(
     caches.open(`slip-${VERSION}`).then((cache) =>
       cache.addAll([
@@ -35,18 +36,22 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
 
+  // Cache-first so a waiting newer build cannot replace the UI until Update.
   event.respondWith(
     (async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
       try {
-        const fresh = await fetch(request, { cache: "no-store" });
-        const cache = await caches.open(`slip-${VERSION}`);
-        cache.put(request, fresh.clone());
+        const fresh = await fetch(request);
+        if (fresh && fresh.ok) {
+          const cache = await caches.open(`slip-${VERSION}`);
+          cache.put(request, fresh.clone());
+        }
         return fresh;
       } catch {
-        const cached = await caches.match(request);
-        if (cached) return cached;
         if (request.mode === "navigate") {
-          return caches.match("./index.html");
+          const fallback = await caches.match("./index.html");
+          if (fallback) return fallback;
         }
         throw new Error("Offline and not cached");
       }

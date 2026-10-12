@@ -1051,30 +1051,59 @@ async function importBackup(file) {
   alert("Backup imported.");
 }
 
+let slipServiceWorkerRegistration = null;
+let slipUpdateReloadArmed = false;
+
+function showUpdateBanner() {
+  els.updateBanner?.classList.remove("hidden");
+}
+
+function watchInstallingWorker(worker) {
+  if (!worker) return;
+  worker.addEventListener("statechange", () => {
+    if (worker.state !== "installed") return;
+    if (navigator.serviceWorker.controller) {
+      // A newer build is waiting — keep running this version until Update.
+      showUpdateBanner();
+      return;
+    }
+    // First-time install: activate quietly so offline cache works.
+    worker.postMessage("SKIP_WAITING");
+  });
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+
   navigator.serviceWorker
     .register(`./sw.js?v=${encodeURIComponent(window.SLIP_VERSION || "1")}`)
     .then((registration) => {
+      slipServiceWorkerRegistration = registration;
+
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        showUpdateBanner();
+      }
+      watchInstallingWorker(registration.installing);
+
       registration.addEventListener("updatefound", () => {
-        const worker = registration.installing;
-        if (!worker) return;
-        worker.addEventListener("statechange", () => {
-          if (
-            worker.state === "installed" &&
-            navigator.serviceWorker.controller
-          ) {
-            els.updateBanner?.classList.remove("hidden");
-          }
-        });
+        watchInstallingWorker(registration.installing);
       });
+
+      const checkForUpdate = () => {
+        registration.update().catch(() => undefined);
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") checkForUpdate();
+      });
+      window.addEventListener("focus", checkForUpdate);
+      // Periodic check while the Home Screen app stays open.
+      setInterval(checkForUpdate, 60 * 60 * 1000);
     })
     .catch(() => undefined);
 
-  let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (refreshing) return;
-    refreshing = true;
+    // Only reload after the user taps Update (or first-install activate).
+    if (!slipUpdateReloadArmed) return;
     window.location.reload();
   });
 }
@@ -1086,10 +1115,13 @@ els.importData?.addEventListener("change", (event) => {
   event.target.value = "";
 });
 els.reloadUpdate?.addEventListener("click", () => {
-  const sending = navigator.serviceWorker?.controller;
-  if (sending) {
-    sending.postMessage("SKIP_WAITING");
+  const waiting = slipServiceWorkerRegistration?.waiting;
+  slipUpdateReloadArmed = true;
+  if (waiting) {
+    waiting.postMessage("SKIP_WAITING");
+    return;
   }
+  // No waiting worker — still reload so the banner can dismiss cleanly.
   window.location.reload();
 });
 
