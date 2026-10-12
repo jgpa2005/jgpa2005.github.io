@@ -134,6 +134,8 @@ const els = {
   exportData: document.getElementById("export-data"),
   importData: document.getElementById("import-data"),
   updateBanner: document.getElementById("update-banner"),
+  updateVersion: document.getElementById("update-version"),
+  updateNotes: document.getElementById("update-notes"),
   reloadUpdate: document.getElementById("reload-update"),
   appVersion: document.getElementById("app-version"),
 };
@@ -1054,8 +1056,39 @@ async function importBackup(file) {
 let slipServiceWorkerRegistration = null;
 let slipUpdateReloadArmed = false;
 
-function showUpdateBanner() {
+function renderUpdateNotes(data) {
+  if (els.updateVersion) {
+    els.updateVersion.textContent = data?.version
+      ? `Version ${data.version}`
+      : "";
+  }
+  if (!els.updateNotes) return;
+  els.updateNotes.innerHTML = "";
+  const notes = Array.isArray(data?.notes) ? data.notes : [];
+  for (const note of notes) {
+    if (typeof note !== "string" || !note.trim()) continue;
+    const item = document.createElement("li");
+    item.textContent = note.trim();
+    els.updateNotes.appendChild(item);
+  }
+}
+
+async function loadWhatsNew() {
+  try {
+    const response = await fetch(`./whats-new.json?t=${Date.now()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function showUpdateBanner() {
   els.updateBanner?.classList.remove("hidden");
+  const data = await loadWhatsNew();
+  if (data) renderUpdateNotes(data);
 }
 
 function watchInstallingWorker(worker) {
