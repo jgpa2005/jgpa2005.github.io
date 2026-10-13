@@ -1,7 +1,8 @@
 {
-  "version": "2026.10.13.1",
+  "version": "2026.10.13.2",
   "notes": [
-    "Choose currency: US Dollar (USD) or Philippine Peso (Php)",
-    "Currency preference is saved on your phone and included in backups"
+    "Check for updates button under Your data",
+    "Update banner appears when a newer Slip is published",
+    "Philippine Peso (Php) currency option"
   ]
 }

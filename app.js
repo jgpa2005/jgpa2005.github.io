@@ -154,6 +154,7 @@ const els = {
   cancelEdit: document.getElementById("cancel-edit"),
   exportData: document.getElementById("export-data"),
   importData: document.getElementById("import-data"),
+  checkUpdate: document.getElementById("check-update"),
   currencySelect: document.getElementById("currency-select"),
   updateBanner: document.getElementById("update-banner"),
   updateVersion: document.getElementById("update-version"),
@@ -1125,10 +1126,32 @@ async function loadWhatsNew() {
   }
 }
 
-async function showUpdateBanner() {
+async function showUpdateBanner(data) {
+  const notes = data || (await loadWhatsNew());
+  if (notes) renderUpdateNotes(notes);
   els.updateBanner?.classList.remove("hidden");
+}
+
+async function checkForPublishedUpdate({ manual = false } = {}) {
   const data = await loadWhatsNew();
-  if (data) renderUpdateNotes(data);
+  if (!data?.version) {
+    if (manual) {
+      alert("Could not check for updates right now. Try again on Wi‑Fi.");
+    }
+    return false;
+  }
+
+  if (data.version !== window.SLIP_VERSION) {
+    await showUpdateBanner(data);
+    slipServiceWorkerRegistration?.update().catch(() => undefined);
+    return true;
+  }
+
+  if (manual) {
+    els.updateBanner?.classList.add("hidden");
+    alert(`Slip is up to date.\n\nVersion ${window.SLIP_VERSION}`);
+  }
+  return false;
 }
 
 function watchInstallingWorker(worker) {
@@ -1137,7 +1160,7 @@ function watchInstallingWorker(worker) {
     if (worker.state !== "installed") return;
     if (navigator.serviceWorker.controller) {
       // A newer build is waiting — keep running this version until Update.
-      showUpdateBanner();
+      void showUpdateBanner();
       return;
     }
     // First-time install: activate quietly so offline cache works.
@@ -1145,16 +1168,48 @@ function watchInstallingWorker(worker) {
   });
 }
 
-function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
+async function clearSlipCaches() {
+  if (!("caches" in window)) return;
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith("slip-"))
+      .map((key) => caches.delete(key)),
+  );
+}
 
+async function applySlipUpdate() {
+  slipUpdateReloadArmed = true;
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      if (registration.waiting) {
+        registration.waiting.postMessage("SKIP_WAITING");
+      }
+    }
+    await clearSlipCaches();
+  } catch {
+    /* still reload */
+  }
+  // Cache-bust navigation so Home Screen cannot keep the old shell.
+  window.location.replace(`./?updated=${Date.now()}`);
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    void checkForPublishedUpdate();
+    return;
+  }
+
+  // Register a stable script URL (no ?v=). Versioned SW URLs can get stuck
+  // on CDN caches and never report an update to Home Screen apps.
   navigator.serviceWorker
-    .register(`./sw.js?v=${encodeURIComponent(window.SLIP_VERSION || "1")}`)
+    .register("./sw.js")
     .then((registration) => {
       slipServiceWorkerRegistration = registration;
 
       if (registration.waiting && navigator.serviceWorker.controller) {
-        showUpdateBanner();
+        void showUpdateBanner();
       }
       watchInstallingWorker(registration.installing);
 
@@ -1162,20 +1217,22 @@ function registerServiceWorker() {
         watchInstallingWorker(registration.installing);
       });
 
-      const checkForUpdate = () => {
+      const probe = () => {
         registration.update().catch(() => undefined);
+        void checkForPublishedUpdate();
       };
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") checkForUpdate();
+        if (document.visibilityState === "visible") probe();
       });
-      window.addEventListener("focus", checkForUpdate);
-      // Periodic check while the Home Screen app stays open.
-      setInterval(checkForUpdate, 60 * 60 * 1000);
+      window.addEventListener("focus", probe);
+      setInterval(probe, 30 * 60 * 1000);
+      probe();
     })
-    .catch(() => undefined);
+    .catch(() => {
+      void checkForPublishedUpdate();
+    });
 
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    // Only reload after the user taps Update (or first-install activate).
     if (!slipUpdateReloadArmed) return;
     window.location.reload();
   });
@@ -1187,6 +1244,9 @@ els.importData?.addEventListener("change", (event) => {
   if (file) void importBackup(file);
   event.target.value = "";
 });
+els.checkUpdate?.addEventListener("click", () => {
+  void checkForPublishedUpdate({ manual: true });
+});
 els.currencySelect?.addEventListener("change", () => {
   applyCurrency(els.currencySelect.value);
 });
@@ -1194,14 +1254,7 @@ if (els.currencySelect) {
   els.currencySelect.value = state.currency;
 }
 els.reloadUpdate?.addEventListener("click", () => {
-  const waiting = slipServiceWorkerRegistration?.waiting;
-  slipUpdateReloadArmed = true;
-  if (waiting) {
-    waiting.postMessage("SKIP_WAITING");
-    return;
-  }
-  // No waiting worker — still reload so the banner can dismiss cleanly.
-  window.location.reload();
+  void applySlipUpdate();
 });
 
 if (els.appVersion) {

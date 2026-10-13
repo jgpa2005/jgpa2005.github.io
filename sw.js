@@ -1,5 +1,5 @@
 /* Slip service worker: keep the running version until the user taps Update. */
-const VERSION = "2026.10.13.1";
+const VERSION = "2026.10.13.2";
 
 self.addEventListener("install", (event) => {
   // Do not skipWaiting here — stay in "waiting" until the Update button
