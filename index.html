@@ -20,7 +20,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=2026.10.12.14" />
+    <link rel="stylesheet" href="styles.css?v=2026.10.13.1" />
   </head>
   <body>
     <div class="atmosphere" aria-hidden="true"></div>
@@ -117,6 +117,13 @@
             Transactions live on this phone. Before deleting the Home Screen icon
             or changing the Slip web address, export a backup.
           </p>
+          <label class="field currency-field">
+            <span>Currency</span>
+            <select id="currency-select" class="compact-input">
+              <option value="USD">US Dollar (USD)</option>
+              <option value="PHP">Philippine Peso (Php)</option>
+            </select>
+          </label>
           <div class="data-actions">
             <button type="button" id="export-data" class="btn secondary">
               Export backup
@@ -242,7 +249,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
-    <script src="version.js?v=2026.10.12.14"></script>
-    <script src="app.js?v=2026.10.12.14"></script>
+    <script src="version.js?v=2026.10.13.1"></script>
+    <script src="app.js?v=2026.10.13.1"></script>
   </body>
 </html>

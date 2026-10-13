@@ -16,6 +16,11 @@ const EXCLUDED_TYPES = new Set(["Except"]);
 const STORAGE_KEY = "slip.web.expenses.v1";
 const CATEGORIES_KEY = "slip.web.categories.v1";
 const ESTABLISHMENTS_KEY = "slip.web.establishments.v1";
+const CURRENCY_KEY = "slip.web.currency.v1";
+const CURRENCIES = {
+  USD: { code: "USD", locale: undefined, label: "US Dollar (USD)" },
+  PHP: { code: "PHP", locale: "en-PH", label: "Philippine Peso (Php)" },
+};
 
 function isIncome(type) {
   return INCOME_TYPES.has(type);
@@ -25,11 +30,26 @@ function isExcluded(type) {
   return EXCLUDED_TYPES.has(type);
 }
 
-const money = new Intl.NumberFormat(undefined, {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-});
+function loadCurrency() {
+  try {
+    const raw = localStorage.getItem(CURRENCY_KEY);
+    if (raw && CURRENCIES[raw]) return raw;
+  } catch {
+    /* keep default */
+  }
+  return "USD";
+}
+
+function makeMoneyFormatter(currencyCode) {
+  const config = CURRENCIES[currencyCode] || CURRENCIES.USD;
+  return new Intl.NumberFormat(config.locale, {
+    style: "currency",
+    currency: config.code,
+    minimumFractionDigits: 2,
+  });
+}
+
+let money = makeMoneyFormatter(loadCurrency());
 
 const shortDate = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -87,6 +107,7 @@ const state = {
   expenses: loadExpenses(),
   customCategories: loadCustomCategories(),
   establishments: loadSavedEstablishments(),
+  currency: loadCurrency(),
   type: "Restaurant",
   mode: "week",
   editingId: null,
@@ -133,6 +154,7 @@ const els = {
   cancelEdit: document.getElementById("cancel-edit"),
   exportData: document.getElementById("export-data"),
   importData: document.getElementById("import-data"),
+  currencySelect: document.getElementById("currency-select"),
   updateBanner: document.getElementById("update-banner"),
   updateVersion: document.getElementById("update-version"),
   updateNotes: document.getElementById("update-notes"),
@@ -142,6 +164,20 @@ const els = {
 
 function saveExpenses() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.expenses));
+}
+
+function saveCurrency() {
+  localStorage.setItem(CURRENCY_KEY, state.currency);
+}
+
+function applyCurrency(currencyCode, { persist = true } = {}) {
+  const next = CURRENCIES[currencyCode] ? currencyCode : "USD";
+  state.currency = next;
+  money = makeMoneyFormatter(next);
+  if (els.currencySelect) els.currencySelect.value = next;
+  if (persist) saveCurrency();
+  renderHome();
+  renderConsolidate();
 }
 
 function saveCategories() {
@@ -994,6 +1030,7 @@ function exportBackup() {
     app: "Slip",
     version: window.SLIP_VERSION || "unknown",
     exportedAt: new Date().toISOString(),
+    currency: state.currency,
     expenses: state.expenses,
     customCategories: state.customCategories,
     establishments: state.establishments,
@@ -1044,6 +1081,9 @@ async function importBackup(file) {
   saveExpenses();
   saveCategories();
   saveEstablishments();
+  if (typeof parsed.currency === "string" && CURRENCIES[parsed.currency]) {
+    applyCurrency(parsed.currency);
+  }
   seedEstablishmentsFromExpenses();
   renderEstablishmentSuggestions();
   renderTypePicker();
@@ -1147,6 +1187,12 @@ els.importData?.addEventListener("change", (event) => {
   if (file) void importBackup(file);
   event.target.value = "";
 });
+els.currencySelect?.addEventListener("change", () => {
+  applyCurrency(els.currencySelect.value);
+});
+if (els.currencySelect) {
+  els.currencySelect.value = state.currency;
+}
 els.reloadUpdate?.addEventListener("click", () => {
   const waiting = slipServiceWorkerRegistration?.waiting;
   slipUpdateReloadArmed = true;
